@@ -1,0 +1,27 @@
+# Multi-host override — run the API alone on its own host (Host B), reachable
+# over the NetBird overlay instead of a shared Docker network.
+#
+# Layer it on top of the base file (it only ADDS a published port and turns the
+# `edge` network into a plain local bridge, since there is no cross-host Docker
+# network in this mode):
+#
+#   API_NETBIRD_IP=100.92.0.5 \
+#     docker compose -f api/docker-compose.yml -f api/docker-compose.netbird.yml \
+#     up -d --build
+#
+# Then on the KONG host set API_UPSTREAM to this host's NetBird IP/name and
+# re-render Kong (see README → Multi-host).
+
+services:
+  api:
+    ports:
+      # Bind ONLY to this host's NetBird interface IP, so the API never listens
+      # on a public NIC — set API_NETBIRD_IP to the IP from `netbird status`.
+      - "${API_NETBIRD_IP:?set API_NETBIRD_IP to this host's NetBird IP}:8000:8000"
+
+networks:
+  # No shared cross-host Docker network here — make `edge` a plain local bridge
+  # so the API stack is self-contained on Host B (the base file declares it
+  # external: true for the single-host case).
+  edge:
+    external: false

@@ -1,0 +1,29 @@
+name: sample-api
+
+# ----------------------------------------------------------------------------
+# Sample backend API — its OWN compose project, independent of the gateway.
+# It joins the shared external `edge` network so Kong can reach it as
+# http://api:8000. It is NOT published to the host: the only way in is through
+# Kong (which enforces JWT auth).
+#
+# The `edge` network must exist first (shared with the gateway):
+#   docker network create edge
+#
+# Run with:  docker compose -f api/docker-compose.yml up --build
+# ----------------------------------------------------------------------------
+
+services:
+  api:
+    build: .
+    expose:
+      - "8000"
+    networks:
+      edge:
+        # Kong's upstream URL is http://api:8000 — guarantee that DNS name.
+        aliases:
+          - api
+    restart: unless-stopped
+
+networks:
+  edge:
+    external: true

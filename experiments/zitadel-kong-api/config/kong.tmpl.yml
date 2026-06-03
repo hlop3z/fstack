@@ -1,0 +1,83 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Kong declarative config TEMPLATE (DB-less).  EDIT THIS FILE to configure Kong.
+#
+# `zk gen-config` renders it (Go text/template) into the final kong.yml that Kong
+# loads, filling in three values (written WITH double-brace syntax in the file):
+#   .Issuer        Zitadel issuer (also the jwt credential key)
+#   .Upstream      the sample API upstream (http://api:8000)
+#   indent N .PEM  Zitadel's RS256 public key, each line indented N spaces
+#
+# Everything else is plain Kong declarative config — add services, routes,
+# plugins, consumers freely. Reference: https://docs.konghq.com/gateway/latest/
+# After editing:  docker compose up --build kong-init && docker compose restart kong
+# ─────────────────────────────────────────────────────────────────────────────
+_format_version: "3.0"
+_transform: true
+
+# ── Services & routes ────────────────────────────────────────────────────────
+# A service is an upstream; routes match incoming requests to it. Plugins can be
+# attached at the service, route, consumer, or global level (see the bottom).
+services:
+  - name: sample-api
+    url: {{ .Upstream }}
+    routes:
+      - name: api-route
+        paths:
+          - /api
+        strip_path: false
+    # Plugins scoped to THIS service only:
+    plugins:
+      # Require a valid Zitadel JWT on every request to /api/*.
+      - name: jwt
+        config:
+          key_claim_name: iss
+          claims_to_verify:
+            - exp
+          run_on_preflight: true
+
+      # ── Example: rate limiting (uncomment to enable) ──
+      # - name: rate-limiting
+      #   config:
+      #     minute: 60
+      #     policy: local        # local = per-node counters (fine for DB-less)
+
+      # ── Example: CORS for browser clients ──
+      # - name: cors
+      #   config:
+      #     origins: ["http://localhost:3000"]
+      #     methods: ["GET", "POST", "OPTIONS"]
+      #     headers: ["Authorization", "Content-Type"]
+      #     credentials: true
+
+      # ── Example: strip the Authorization header before it hits the upstream ──
+      # - name: request-transformer
+      #   config:
+      #     remove:
+      #       headers: ["authorization"]
+
+  # ── Example: a second, PUBLIC service with no auth ──
+  # - name: public-api
+  #   url: http://api:8000
+  #   routes:
+  #     - name: health-route
+  #       paths: ["/public"]
+  #       strip_path: true
+
+# ── Consumers & credentials ──────────────────────────────────────────────────
+# The jwt credential below is what makes Kong trust Zitadel: it maps the token's
+# `iss` claim to Zitadel's signing key. `zk gen-config` injects the live key.
+consumers:
+  - username: zitadel
+    jwt_secrets:
+      - key: "{{ .Issuer }}"
+        algorithm: RS256
+        rsa_public_key: |
+{{ indent 10 .PEM }}
+
+# ── Global plugins (apply to ALL routes) ─────────────────────────────────────
+# Uncomment to turn on. Plugins listed here run for every request.
+# plugins:
+#   - name: prometheus            # metrics at :8001/metrics
+#   - name: correlation-id        # adds an X-Kong-Request-Id header
+#     config:
+#       header_name: X-Request-Id

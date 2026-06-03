@@ -1,0 +1,10 @@
+.env
+# Zitadel credentials — never commit
+config/service-key.json
+service-key.json
+*-key.json
+# zk CLI build artifacts
+zk
+zk.exe
+kong.preview.yml
+kong-preview.yml
