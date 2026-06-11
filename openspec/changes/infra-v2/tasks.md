@@ -48,10 +48,14 @@
 
 ## 6. NetBird in-cluster + DNS cutover
 
-- [ ] 6.1 Carry NetBird state from interim compose volume into the component's PVC; bring up in-cluster NetBird; verify all peers reconnect without re-enrollment
-- [ ] 6.2 Stop interim compose (leave on disk); first in-cluster backup CronJob run round-trip verified; remove host-level backup timer
-- [ ] 6.3 Lower Cloudflare TTLs; final Garage delta sync; **DNS flip** to new cluster ingress after all gates green
-- [ ] 6.4 Verification window (days): monitor app, DB, mesh, backups; v1-on-srv1 untouched as rollback anchor
+- [x] 6.1 NetBird in-cluster on srv2 (LB-owning worker, not CP): config/dashboard as SOPS secrets, state transplanted into PVC, LE cert issued, interim compose stopped (on disk for rollback), vpn.dufeut.com flipped to srv2 (TTL 60), ALL peers reconnected. Fixes: NAT-hairpin hosts entry on the LB worker (folded into netbird_client role)
+- [x] 6.2 In-cluster backup CronJob round-trip VERIFIED (`netbird-identity-k8s-…tar.gz`: store/{store,idp,events}.db + config.yaml). Backup uses file-copy (rclone image has no sqlite). Host-level timer on clouder still present — remove at phase 7 decommission
+- [~] 6.3 **PARTIAL** — vpn.dufeut.com flipped (NetBird). dufeut.com + auth.dufeut.com NOT yet flipped (the user-visible cutover — awaiting go). Cloudflare TTLs lowered. Remaining: final db-main re-recovery (+ 2-step credential resync per phase-5 lesson), final Garage delta sync, then app/auth flip
+- [ ] 6.4 Verification window (days): v1-on-srv1 = rollback anchor until phase 7
+
+### Phase-6 firefight log (all fixed, in git)
+- cert-manager webhook stranded on srv2 → cross-node API→webhook timeouts wedged the whole platform Kustomization → pinned cert-manager to the CP (same node as API server). Schema rejected YAML anchors; inlined.
+- **Flannel-VXLAN-over-wt0 desync**: netbird restarts flapped wt0; flannel routes+FDB on clouder/srv2 went stale → srv2↔clouder pod traffic 100%-dropped → DNS dead (CoreDNS is clouder-only) → S3 name resolution failed → backups + CNPG WAL archiving failed. Fixed by `systemctl restart k3s`/`k3s-agent` to rebuild flannel over current wt0. Documented in firewall role with a resilience TODO (multi-node CoreDNS).
 
 ## 7. srv1 + decommission (terminal)
 
