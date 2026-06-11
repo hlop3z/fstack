@@ -58,10 +58,13 @@
 - cert-manager webhook stranded on srv2 → cross-node API→webhook timeouts wedged the whole platform Kustomization → pinned cert-manager to the CP (same node as API server). Schema rejected YAML anchors; inlined.
 - **Flannel-VXLAN-over-wt0 desync**: netbird restarts flapped wt0; flannel routes+FDB on clouder/srv2 went stale → srv2↔clouder pod traffic 100%-dropped → DNS dead (CoreDNS is clouder-only) → S3 name resolution failed → backups + CNPG WAL archiving failed. Fixed by `systemctl restart k3s`/`k3s-agent` to rebuild flannel over current wt0. Documented in firewall role with a resilience TODO (multi-node CoreDNS).
 
-## 7. srv1 + decommission (terminal)
+## 7. srv1 + decommission (terminal) — ✅ COMPLETE 2026-06-11
 
-- [ ] 7.1 After the window: capture final v1 state notes; drain srv1, rebuild (roles), join as second worker
-- [ ] 7.2 Re-run MTU gate across the live WAN link (clouder/srv2 ↔ srv1); rebalance stateless replicas across workers
-- [ ] 7.3 Delete interim compose dir from clouder; prune dead peers (old clouder, stale entries) in NetBird dashboard
-- [ ] 7.4 Archive `ansible-01` read-only (final commit links this change); update fstack docs (ultra-think + fleet doc) with as-built notes
-- [ ] 7.5 Post-migration review: confirm invariants hold (one engine per layer, generated inventory, no snowflakes); list deltas for console-v2 change
+- [x] 7.1 Production gate passed (all 4 hostnames 200 on new cluster, data verified); v1 k3s decommissioned/wiped from srv1; srv1 provisioned + joined as 2nd worker (node-storage) over wt0. Capacity doubled: srv2 98%→14% CPU
+- [x] 7.2 MTU gate GREEN across the srv1 WAN link: pod-to-pod iperf 188 Mbit/s, no black-hole over 64 ms WireGuard; controllers de-pinned from node-monitoring and spread across both workers
+- [x] 7.3 Interim NetBird compose dir + host backup timer removed from clouder (in-cluster CronJob verified taking over). Remaining: prune the dead pre-wipe clouder peer + offline laptop in the NetBird dashboard (operator, cosmetic)
+- [x] 7.4 ansible-01 archived read-only (see closeout); docs updated
+- [x] 7.5 Invariants hold: one engine per layer (Flux only L2 writer), generated inventory, no snowflakes (3 identical-shape hosts), all gitops-managed. Console-v2 deltas (tag-selected actions, ansible-runner per-host events) tracked in explore-nicegui doc
+
+### Beyond migration: EKS-readiness platform (Tiers 1–2, this session)
+external-dns (declarative DNS) · HPA + metrics-server · Pod Security Standards + ResourceQuota/LimitRange · Velero (cluster DR to S3) · Kyverno (3 audit policies) · Trivy (CVE scanning, 49+ reports) · Tempo + OTel (tracing pipeline) · Flagger (canary controller). All gitops-managed, all transfer to EKS. Deferred: Gateway API migration, Flux image automation (needs write deploy key), per-app Flagger Canary, Linkerd/cosign/SLOs (Tier 3) — see docs/explore-eks-readiness.md.
