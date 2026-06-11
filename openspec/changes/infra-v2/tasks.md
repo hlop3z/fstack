@@ -18,15 +18,15 @@
 - [x] 2.2 `firewall` role: one home for UFW; provider-edge mode (clouder); symmetric fleet ICMP; wt0 allowed wholesale
 - [x] 2.3 `netbird_client` role: pinned 0.71.4 deb + setup-key join via community.sops; idempotent (wt0 check)
 - [x] 2.4 `update.yml` (serial, reboot report) + `ssh-rotate.yml` ported
-- [ ] 2.5 Run on clouder — **BLOCKED on a NetBird setup key**: the store only holds a hashed one-off key (plaintext unrecoverable by design). Operator: create a *reusable* setup key in the dashboard (vpn.dufeut.com → Setup Keys), then it goes into `infra/secrets/infra.sops.yaml` as `netbird_setup_key`
+- [x] 2.5 clouder hardened + mesh-joined (Management/Signal Connected); setup key SOPS-encrypted in `infra/secrets/infra.sops.yaml`, raw operator copy at `~/.infra/netbird/setup-key`
 
 ## 3. Cluster provisioning (L1)
 
 - [x] 3.1 `k3s_cp` role: pinned v1.35.5+k3s1; node-ip/advertise/flannel-iface on wt0; CP taint; tls-san public+wt0; kubeconfig → ~/.infra/kube/prod.yaml
 - [x] 3.2 `k3s_worker` role: join over CP wt0; node labels from fleet.yml; ServiceLB pinned to workers (`enablelb` label) so the interim compose's 80/443 on clouder don't conflict
 - [x] 3.3 `cluster.yml`: tag-selected plays; asserts wt0 before k3s
-- [ ] 3.4 Provision clouder as CP — ready to run, gated by 2.5
-- [ ] 3.5 Flux bootstrap — authored (vendored flux v2.8.8 via k3s manifests dir — zero kubectl in playbooks; sops-age + deploy-key Secrets templated; GitRepository → ssh://github.com/dufeutech/infra-v1, deploy key registered on GitHub); executes with 3.4
+- [x] 3.4 clouder IS the CP: k3s v1.35.5+k3s1 Ready, node-ip on wt0, CP taint verified, kubeconfig at `~/.infra/kube/prod.yaml` (public-IP server)
+- [x] 3.5 Flux LIVE: v2.8.8 via k3s manifests dir (4 core controllers Running — patched with CP tolerations, a cluster-of-one lesson; image-automation/reflector/notification left Pending, unused); GitRepository Ready at `main@e524195` over the deploy key (after fixing a Windows ssh-keygen quoting bug that passphrase-locked it); root Kustomization reconciling, infra/platform/apps children spawned, first HelmRelease pulling. Platform/apps will sit not-ready until srv2 joins (phase 5) — documented expected state
 
 ## 4. GitOps tree (L2 authoring)
 
