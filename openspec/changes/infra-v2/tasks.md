@@ -1,36 +1,40 @@
 # Tasks: infra-v2
 
+> NOTE (2026-06-11, design D1 revised): all config artifacts live in the PRIVATE
+> repo `dufeutech/infra-v1` (pushed, commit e524195), not fstack. fstack is the
+> public console tool; the target repo declares actions via `console.actions.yml`.
+
 ## 1. Fleet model + scaffolding
 
-- [ ] 1.1 Write `fleet.yml` (clouder `[cp]`, srv1 `[worker]`, srv2 `[worker]`, addresses, ssh key ref)
-- [ ] 1.2 `scripts/gen_inventory.py` (stdlib): fleet.yml → `infra/inventory.yml` (group per tag + `all`, ansible_host wiring); idempotent; refuses to run if fleet.yml invalid
-- [ ] 1.3 Scaffold `infra/` (roles + playbooks dirs, ansible.cfg pointing at generated inventory) and `gitops/` (clusters/prod, platform/components, apps)
-- [ ] 1.4 CI checks (GitHub Actions): `kustomize build` all cluster roots; SOPS lint (no plaintext Secrets); pin lint (no `:latest`); boundary lint (`infra/` has no k8s manifests, `gitops/` no Ansible); inventory freshness (`gen_inventory.py --check`)
-- [ ] 1.5 Console registry: add `fleet:gen-inventory`, `cluster:provision`, `host:update` actions; flip `CONSOLE_TARGET` default to fstack
+- [x] 1.1 `fleet.yml` (clouder `[cp]`, srv1/srv2 `[worker]`, per-host `labels` for k3s node labels)
+- [x] 1.2 `scripts/gen_inventory.py` (PyYAML): fleet.yml → `infra/inventory.yml`; `--check` mode for CI
+- [x] 1.3 Scaffolded `infra/` + `gitops/` (in infra-v1)
+- [x] 1.4 CI (infra-v1): kustomize build all roots; SOPS lint; pin lint; boundary lint; inventory freshness; ansible syntax check
+- [x] 1.5 Console: target-repo action loading (`console.actions.yml`) replaces hardcoding; `CONSOLE_TARGET` default `../infra-v1`; infra-v1 declares fleet:gen-inventory / host:update / cluster:provision / ssh:rotate — all 6 verified loading
 
 ## 2. Infra roles (L0)
 
-- [ ] 2.1 `base` role: distill v1 `setup.yml` (apt, SSH hardening, fail2ban, sysctl, swap, unattended-upgrades, timezone) for Debian 13
-- [ ] 2.2 `firewall` role: single home for UFW logic; provider-edge mode (clouder); symmetric fleet ICMP; k3s/NetBird port matrix from one vars table
-- [ ] 2.3 `netbird_client` role: pinned client install + setup-key join (SOPS secret); idempotent re-run; verify wt0 up
-- [ ] 2.4 `update.yml` + `ssh-rotate.yml` ported from v1 playbooks onto the roles/inventory
-- [ ] 2.5 Run `base`+`firewall`+`netbird_client` on clouder (it lacks a mesh client today); verify clouder appears as a NetBird peer
+- [x] 2.1 `base` role (Debian 13, from v1 setup.yml)
+- [x] 2.2 `firewall` role: one home for UFW; provider-edge mode (clouder); symmetric fleet ICMP; wt0 allowed wholesale
+- [x] 2.3 `netbird_client` role: pinned 0.71.4 deb + setup-key join via community.sops; idempotent (wt0 check)
+- [x] 2.4 `update.yml` (serial, reboot report) + `ssh-rotate.yml` ported
+- [ ] 2.5 Run on clouder — **BLOCKED on a NetBird setup key**: the store only holds a hashed one-off key (plaintext unrecoverable by design). Operator: create a *reusable* setup key in the dashboard (vpn.dufeut.com → Setup Keys), then it goes into `infra/secrets/infra.sops.yaml` as `netbird_setup_key`
 
 ## 3. Cluster provisioning (L1)
 
-- [ ] 3.1 `k3s_cp` role: pinned k3s server; `--node-ip` = wt0; CP taint; `tls-san` public+wt0; kubeconfig fetched to operator
-- [ ] 3.2 `k3s_worker` role: agent join via CP wt0 address, node-ip = wt0
-- [ ] 3.3 `cluster.yml` playbook: tag-selected (cp → server, worker → join); refuses hosts missing wt0
-- [ ] 3.4 Provision clouder as CP (cluster of one); verify API reachable on public + wt0; taint effective
-- [ ] 3.5 Flux bootstrap in `k3s_cp` role: install Flux, GitRepository → this repo `gitops/clusters/prod/`, age-key Secret; verify reconciliation of an empty root
+- [x] 3.1 `k3s_cp` role: pinned v1.35.5+k3s1; node-ip/advertise/flannel-iface on wt0; CP taint; tls-san public+wt0; kubeconfig → ~/.infra/kube/prod.yaml
+- [x] 3.2 `k3s_worker` role: join over CP wt0; node labels from fleet.yml; ServiceLB pinned to workers (`enablelb` label) so the interim compose's 80/443 on clouder don't conflict
+- [x] 3.3 `cluster.yml`: tag-selected plays; asserts wt0 before k3s
+- [ ] 3.4 Provision clouder as CP — ready to run, gated by 2.5
+- [ ] 3.5 Flux bootstrap — authored (vendored flux v2.8.8 via k3s manifests dir — zero kubectl in playbooks; sops-age + deploy-key Secrets templated; GitRepository → ssh://github.com/dufeutech/infra-v1, deploy key registered on GitHub); executes with 3.4
 
-## 4. GitOps tree (L2 authoring — no cluster needed)
+## 4. GitOps tree (L2 authoring)
 
-- [ ] 4.1 Reorganize v1's rendered `ansible-01/gitops/` tree into `gitops/platform/components/{postgres,s3,redis,mq,oidc,monitoring}` keeping pins + vendored chart references
-- [ ] 4.2 `gitops/apps/dufeut-site/` base + prod overlay; SOPS re-encrypt its secrets into the new layout
-- [ ] 4.3 Placement rules: nodeSelectors pinning stateful components to srv2; CP tolerations only where intended
-- [ ] 4.4 `netbird` component: pinned images (replacing interim `:latest`), CP-pinned with toleration, same public endpoints (vpn.dufeut.com via ingress, STUN 3478 hostPort), state PVC, backup CronJob writing v1's archive shape to the same S3 prefix
-- [ ] 4.5 `clusters/prod/` root wiring all components; CI green on the whole tree
+- [x] 4.1 v1 tree reorganized into `platform/{base,operators,components/{postgres,redis,mq,s3,oidc,monitoring}}` keeping pins + vendored charts (chart paths updated). Deliberate deltas, documented in-file: db-main instances 2→1 (no cross-WAN replica; S3 PITR is the net; WAL path moved to `db-main-v2` so v1's chain stays untouched), mq replicas 2→1, garage 2→1 (grow layout when srv1 joins), monitoring → srv2 (CP is tainted + 1 vCPU)
+- [x] 4.2 `apps/dufeut-site/` + 9 secrets fetched from the LIVE v1 cluster and SOPS-encrypted into the tree (origin-tls ×2, db-backup-s3, cache-auth, zitadel-env, zitadel-masterkey, grafana-admin, dufeut-smtp, netbird-backup-s3); plaintext dumps deleted
+- [x] 4.3 Placement: stateful nodeSelectors → srv2 labels; CP tolerations only on netbird + its backup CronJob
+- [x] 4.4 `netbird` component: digest-pinned to the EXACT images proven by the restore; CP-pinned; IngressRoute mirroring the compose routing (h2c gRPC split); cert-manager component (LE; vpn host isn't CF-proxied); backup CronJob (same archive shape, `netbird-state/k8s/` prefix). Opted-in at phase 6, builds standalone now
+- [x] 4.5 Root wiring complete; all 12 kustomize roots build clean (verified in-container); CI live on infra-v1
 
 ## 5. srv2 cutover (production migration, part 1)
 
