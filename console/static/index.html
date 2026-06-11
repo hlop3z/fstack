@@ -1,0 +1,806 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>INFRA·CONSOLE</title>
+  <script defer src="alpine.min.js"></script>
+  <style>
+    :root {
+      --bg: #070b09;
+      --panel: #0c1210;
+      --panel-2: #0f1714;
+      --line: #1c2b24;
+      --line-2: #14201a;
+      --ink: #c2d4c8;
+      --dim: #5c7264;
+      --faint: #36473d;
+      --phos: #46f0a4;
+      /* SAFE / ok */
+      --amber: #ffb454;
+      /* DISRUPTIVE / running */
+      --red: #ff5d6c;
+      /* DESTRUCTIVE / failed */
+      --cyan: #62d3e8;
+      --mono: ui-monospace, "Cascadia Code", "JetBrains Mono", "Fira Code", Consolas, monospace;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      height: 100%;
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font: 13px/1.55 var(--mono);
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ---- atmosphere: scanlines + vignette, behind everything ---- */
+    .crt {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 9;
+      background:
+        repeating-linear-gradient(0deg, rgba(255, 255, 255, .018) 0 1px, transparent 1px 3px),
+        radial-gradient(ellipse 120% 90% at 50% 0%, transparent 60%, rgba(0, 0, 0, .5) 100%);
+    }
+
+    /* ================= header ================= */
+    header {
+      display: flex;
+      align-items: center;
+      gap: 1.4rem;
+      padding: .65rem 1.2rem;
+      border-bottom: 1px solid var(--line);
+      background: linear-gradient(180deg, var(--panel-2), var(--panel));
+    }
+
+    .wordmark {
+      font-weight: 700;
+      letter-spacing: .18em;
+      color: var(--phos);
+      text-shadow: 0 0 14px rgba(70, 240, 164, .35);
+      white-space: nowrap;
+    }
+
+    .wordmark .tag {
+      color: var(--dim);
+      font-weight: 400;
+      letter-spacing: .08em;
+      margin-left: .6rem;
+    }
+
+    .cursor {
+      display: inline-block;
+      width: .55em;
+      height: 1em;
+      background: var(--phos);
+      vertical-align: text-bottom;
+      margin-left: .25em;
+      animation: blink 1.1s steps(1) infinite;
+    }
+
+    @keyframes blink {
+      50% {
+        opacity: 0;
+      }
+    }
+
+    .head-meta {
+      margin-left: auto;
+      display: flex;
+      gap: 1.6rem;
+      align-items: center;
+      color: var(--dim);
+      font-size: 12px;
+      letter-spacing: .06em;
+    }
+
+    .led {
+      display: inline-block;
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--phos);
+      box-shadow: 0 0 8px var(--phos);
+      margin-right: .45rem;
+    }
+
+    .led.busy {
+      background: var(--amber);
+      box-shadow: 0 0 8px var(--amber);
+      animation: pulse 1s infinite;
+    }
+
+    @keyframes pulse {
+      50% {
+        opacity: .35;
+      }
+    }
+
+    /* ================= layout ================= */
+    main {
+      flex: 1;
+      display: grid;
+      grid-template-columns: minmax(380px, 44%) 1fr;
+      gap: 0;
+      min-height: 0;
+    }
+
+    @media (max-width: 900px) {
+      main {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    /* ---- left column: tabs ---- */
+    .left {
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      border-right: 1px solid var(--line);
+    }
+
+    nav.tabs {
+      display: flex;
+      border-bottom: 1px solid var(--line);
+      background: var(--panel);
+    }
+
+    nav.tabs button {
+      all: unset;
+      cursor: pointer;
+      padding: .55rem 1.1rem;
+      color: var(--dim);
+      font: 12px var(--mono);
+      letter-spacing: .14em;
+      border-right: 1px solid var(--line-2);
+    }
+
+    nav.tabs button:hover {
+      color: var(--ink);
+    }
+
+    nav.tabs button.on {
+      color: var(--phos);
+      background: var(--bg);
+      box-shadow: inset 0 2px 0 var(--phos);
+    }
+
+    nav.tabs .n {
+      color: var(--faint);
+      margin-left: .4rem;
+    }
+
+    .pane {
+      flex: 1;
+      overflow-y: auto;
+      padding: 1rem 1.2rem;
+      min-height: 0;
+    }
+
+    /* ---- action cards ---- */
+    .card {
+      position: relative;
+      border: 1px solid var(--line);
+      background: var(--panel);
+      padding: .8rem 1rem .8rem 1.2rem;
+      margin-bottom: .8rem;
+      animation: rise .35s ease both;
+    }
+
+    .card:nth-child(2) {
+      animation-delay: .05s;
+    }
+
+    .card:nth-child(3) {
+      animation-delay: .1s;
+    }
+
+    .card:nth-child(4) {
+      animation-delay: .15s;
+    }
+
+    .card:nth-child(5) {
+      animation-delay: .2s;
+    }
+
+    @keyframes rise {
+      from {
+        opacity: 0;
+        transform: translateY(6px);
+      }
+    }
+
+    .card::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      top: 0;
+      bottom: 0;
+      width: 3px;
+      background: var(--sev, var(--phos));
+    }
+
+    .card.sev-SAFE {
+      --sev: var(--phos);
+    }
+
+    .card.sev-DISRUPTIVE {
+      --sev: var(--amber);
+    }
+
+    .card.sev-DESTRUCTIVE {
+      --sev: var(--red);
+    }
+
+    .card:hover {
+      border-color: var(--sev);
+    }
+
+    .card .row1 {
+      display: flex;
+      align-items: baseline;
+      gap: .8rem;
+    }
+
+    .card .name {
+      font-weight: 700;
+      letter-spacing: .04em;
+    }
+
+    .chip {
+      font-size: 10px;
+      letter-spacing: .18em;
+      padding: .1rem .5rem;
+      border: 1px solid var(--sev);
+      color: var(--sev);
+    }
+
+    .card .desc {
+      color: var(--dim);
+      font-size: 12px;
+      margin: .25rem 0 .55rem;
+    }
+
+    .card .ctl {
+      display: flex;
+      gap: .6rem;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    select {
+      background: var(--bg);
+      color: var(--ink);
+      border: 1px solid var(--line);
+      font: 12px var(--mono);
+      padding: .3rem .5rem;
+      outline: none;
+    }
+
+    select:focus {
+      border-color: var(--dim);
+    }
+
+    .run {
+      all: unset;
+      cursor: pointer;
+      font: 700 11px var(--mono);
+      letter-spacing: .2em;
+      color: var(--bg);
+      background: var(--sev, var(--phos));
+      padding: .38rem .95rem;
+      transition: filter .12s, transform .06s;
+    }
+
+    .run:hover {
+      filter: brightness(1.15);
+    }
+
+    .run:active {
+      transform: translateY(1px);
+    }
+
+    /* ---- jobs ---- */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+    }
+
+    th {
+      text-align: left;
+      color: var(--faint);
+      font-weight: 400;
+      letter-spacing: .14em;
+      font-size: 10px;
+      padding: .3rem .5rem;
+      border-bottom: 1px solid var(--line);
+    }
+
+    td {
+      padding: .42rem .5rem;
+      border-bottom: 1px solid var(--line-2);
+    }
+
+    tr:hover td {
+      background: var(--panel-2);
+    }
+
+    .st {
+      font-weight: 700;
+    }
+
+    .st-running {
+      color: var(--amber);
+    }
+
+    .st-running::before {
+      content: "● ";
+      animation: pulse 1s infinite;
+    }
+
+    .st-succeeded {
+      color: var(--phos);
+    }
+
+    .st-succeeded::before {
+      content: "● ";
+    }
+
+    .st-failed {
+      color: var(--red);
+    }
+
+    .st-failed::before {
+      content: "● ";
+    }
+
+    a.view {
+      color: var(--cyan);
+      text-decoration: none;
+      cursor: pointer;
+    }
+
+    a.view:hover {
+      text-decoration: underline;
+    }
+
+    /* ---- fleet ---- */
+    .fleet-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: .5rem;
+    }
+
+    .node {
+      border: 1px solid var(--line);
+      background: var(--panel);
+      padding: .45rem .8rem;
+    }
+
+    .node b {
+      color: var(--phos);
+      font-weight: 700;
+    }
+
+    .node small {
+      color: var(--faint);
+      display: block;
+      font-size: 10px;
+      letter-spacing: .12em;
+    }
+
+    .banner {
+      border: 1px solid var(--red);
+      color: var(--red);
+      padding: .6rem .9rem;
+      margin-bottom: .9rem;
+      background: rgba(255, 93, 108, .06);
+      font-size: 12px;
+    }
+
+    .empty {
+      color: var(--faint);
+      padding: 2.2rem 0;
+      text-align: center;
+      letter-spacing: .12em;
+    }
+
+    /* ================= log pane ================= */
+    .logwrap {
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      background: #050807;
+    }
+
+    .logbar {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      padding: .5rem 1rem;
+      border-bottom: 1px solid var(--line);
+      color: var(--dim);
+      font-size: 11px;
+      letter-spacing: .16em;
+      background: var(--panel);
+    }
+
+    .logbar .who {
+      color: var(--ink);
+    }
+
+    .logbar .clear {
+      all: unset;
+      cursor: pointer;
+      margin-left: auto;
+      color: var(--faint);
+    }
+
+    .logbar .clear:hover {
+      color: var(--ink);
+    }
+
+    #log {
+      flex: 1;
+      overflow-y: auto;
+      padding: .9rem 1.1rem;
+      margin: 0;
+      font-size: 12px;
+      line-height: 1.5;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+
+    #log .ln {
+      display: block;
+      color: #9fc2ab;
+    }
+
+    #log .ln.err {
+      color: var(--red);
+    }
+
+    #log .ln.meta {
+      color: var(--faint);
+    }
+
+    #log .ln.ok {
+      color: var(--phos);
+    }
+
+    /* ================= modal ================= */
+    .veil {
+      position: fixed;
+      inset: 0;
+      background: rgba(3, 6, 5, .78);
+      z-index: 20;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      backdrop-filter: blur(2px);
+    }
+
+    .modal {
+      width: min(30rem, 92vw);
+      border: 1px solid var(--sev, var(--amber));
+      background: var(--panel);
+      padding: 1.1rem 1.3rem;
+      box-shadow: 0 0 40px rgba(0, 0, 0, .7), 0 0 18px color-mix(in srgb, var(--sev) 25%, transparent);
+    }
+
+    .modal.sev-DISRUPTIVE {
+      --sev: var(--amber);
+    }
+
+    .modal.sev-DESTRUCTIVE {
+      --sev: var(--red);
+    }
+
+    .modal h4 {
+      margin: 0 0 .3rem;
+      color: var(--sev);
+      letter-spacing: .18em;
+      font-size: 12px;
+    }
+
+    .modal .what {
+      font-size: 14px;
+      margin-bottom: .8rem;
+    }
+
+    .modal .what b {
+      color: var(--sev);
+    }
+
+    .modal input {
+      width: 100%;
+      background: var(--bg);
+      border: 1px solid var(--line);
+      color: var(--ink);
+      font: 13px var(--mono);
+      padding: .45rem .6rem;
+      outline: none;
+      margin-bottom: .9rem;
+    }
+
+    .modal input:focus {
+      border-color: var(--sev);
+    }
+
+    .modal .btns {
+      display: flex;
+      gap: .7rem;
+      justify-content: flex-end;
+    }
+
+    .ghost {
+      all: unset;
+      cursor: pointer;
+      color: var(--dim);
+      padding: .4rem .8rem;
+      font: 11px var(--mono);
+      letter-spacing: .14em;
+    }
+
+    .ghost:hover {
+      color: var(--ink);
+    }
+
+    .arm {
+      all: unset;
+      cursor: pointer;
+      font: 700 11px var(--mono);
+      letter-spacing: .2em;
+      padding: .45rem 1rem;
+      background: var(--sev);
+      color: var(--bg);
+    }
+
+    .arm:disabled {
+      opacity: .25;
+      cursor: not-allowed;
+    }
+
+    ::-webkit-scrollbar {
+      width: 8px;
+      height: 8px;
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: var(--line);
+    }
+
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+  </style>
+</head>
+
+<body x-data="consoleApp()" x-init="init()">
+  <div class="crt"></div>
+
+  <header>
+    <span class="wordmark">▚ INFRA·CONSOLE<span class="cursor"></span><span class="tag">spike</span></span>
+    <div class="head-meta">
+      <span><span class="led" :class="{ busy: running }"></span><span
+          x-text="running ? 'JOB RUNNING' : 'IDLE'"></span></span>
+      <span x-text="hosts.length + ' HOSTS'"></span>
+      <span x-text="clock + ' UTC'"></span>
+    </div>
+  </header>
+
+  <main>
+    <!-- ============ left: tabs ============ -->
+    <div class="left">
+      <nav class="tabs">
+        <button :class="{ on: tab === 'actions' }" @click="tab = 'actions'">ACTIONS<span class="n"
+            x-text="state.actions.length"></span></button>
+        <button :class="{ on: tab === 'jobs' }" @click="tab = 'jobs'">JOBS<span class="n"
+            x-text="state.jobs.length"></span></button>
+        <button :class="{ on: tab === 'fleet' }" @click="tab = 'fleet'">FLEET<span class="n"
+            x-text="hosts.length"></span></button>
+      </nav>
+
+      <!-- actions -->
+      <div class="pane" x-show="tab === 'actions'">
+        <template x-for="action in state.actions" :key="action.name">
+          <article class="card" :class="'sev-' + action.danger">
+            <div class="row1">
+              <span class="name" x-text="action.name"></span>
+              <span class="chip" x-text="action.danger"></span>
+            </div>
+            <div class="desc" x-text="action.description"></div>
+            <div class="ctl">
+              <template x-for="p in action.params" :key="p">
+                <select x-init="paramSel[action.name + '.' + p] = hosts[0] || ''"
+                  x-model="paramSel[action.name + '.' + p]">
+                  <template x-for="name in state.fleet" :key="name">
+                    <option x-text="name"></option>
+                  </template>
+                </select>
+              </template>
+              <button class="run" @click="request(action)">RUN ▸</button>
+            </div>
+          </article>
+        </template>
+      </div>
+
+      <!-- jobs -->
+      <div class="pane" x-show="tab === 'jobs'">
+        <div class="empty" x-show="!state.jobs.length">— NO JOBS THIS SESSION —</div>
+        <table x-show="state.jobs.length">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>ACTION</th>
+              <th>TARGET</th>
+              <th>STATUS</th>
+              <th>EXIT</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            <template x-for="job in state.jobs.slice().reverse()" :key="job.id">
+              <tr>
+                <td x-text="job.id"></td>
+                <td x-text="job.action"></td>
+                <td x-text="job.target"></td>
+                <td><span class="st" :class="'st-' + job.status" x-text="job.status"></span></td>
+                <td x-text="job.exit_code ?? '·'"></td>
+                <td><a class="view" @click="watch(job.id)">view ▸</a></td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- fleet -->
+      <div class="pane" x-show="tab === 'fleet'">
+        <div class="banner" x-show="state.fleet_error" x-text="'INVENTORY UNAVAILABLE: ' + state.fleet_error"></div>
+        <div class="fleet-grid">
+          <template x-for="name in hosts" :key="name">
+            <div class="node"><b x-text="name"></b><small>HOST</small></div>
+          </template>
+          <template x-for="name in groups" :key="name">
+            <div class="node"><span x-text="name"></span><small>GROUP</small></div>
+          </template>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ right: transmission log ============ -->
+    <div class="logwrap">
+      <div class="logbar">
+        <span>TRANSMISSION</span>
+        <span class="who" x-show="watching" x-text="'job ' + watching"></span>
+        <button class="clear" @click="lines = []; watching = null">CLEAR ✕</button>
+      </div>
+      <pre id="log"
+        x-ref="log"><span class="ln meta" x-show="!lines.length">awaiting transmission…</span><template x-for="(l, i) in lines" :key="i"><span class="ln" :class="l.cls" x-text="l.text"></span></template></pre>
+    </div>
+  </main>
+
+  <!-- ============ confirmation modal ============ -->
+  <div class="veil" x-show="pending" x-cloak @keydown.escape.window="pending = null">
+    <div class="modal" :class="pending && 'sev-' + pending.action.danger" @click.outside="pending = null">
+      <template x-if="pending">
+        <div>
+          <h4 x-text="pending.action.danger + ' ACTION'"></h4>
+          <div class="what">
+            run <b x-text="pending.action.name"></b>
+            <span x-show="Object.keys(pending.params).length"
+              x-text="' → ' + Object.values(pending.params).join(', ')"></span> ?
+          </div>
+          <template x-if="pending.action.danger === 'DESTRUCTIVE'">
+            <div>
+              <div class="desc" style="color: var(--dim); font-size: 12px; margin-bottom: .4rem;"
+                x-text="'type the target name (' + pending.target + ') to arm:'"></div>
+              <input x-model="typed" :placeholder="pending.target" autofocus>
+            </div>
+          </template>
+          <div class="btns">
+            <button class="ghost" @click="pending = null">CANCEL</button>
+            <button class="arm" :disabled="pending.action.danger === 'DESTRUCTIVE' && typed !== pending.target"
+              @click="fire()">CONFIRM ▸</button>
+          </div>
+        </div>
+      </template>
+    </div>
+  </div>
+
+  <script>
+    function consoleApp() {
+      return {
+        state: { actions: [], fleet: [], jobs: [], fleet_error: null },
+        paramSel: {}, lines: [], watching: null, es: null,
+        tab: "actions", pending: null, typed: "", clock: "--:--:--",
+
+        get hosts() { return this.state.fleet.filter(n => n.includes(".")) },
+        get groups() { return this.state.fleet.filter(n => !n.includes(".")) },
+        get running() { return this.state.jobs.some(j => j.status === "running") },
+
+        init() {
+          this.refresh()
+          setInterval(() => this.refresh(), 3000)
+          const tick = () => this.clock = new Date().toISOString().slice(11, 19)
+          tick(); setInterval(tick, 1000)
+        },
+
+        async refresh() {
+          try {
+            const r = await fetch("/api/state")
+            if (r.ok) this.state = await r.json()
+          } catch { } // poll again in 3s
+        },
+
+        request(action) {
+          const params = {}
+          for (const p of action.params) params[p] = this.paramSel[action.name + "." + p]
+          const target = Object.values(params)[0] ?? action.name
+          if (action.danger === "SAFE") return this.post(action, params)
+          this.typed = ""
+          this.pending = { action, params, target }
+        },
+
+        fire() {
+          const { action, params, target } = this.pending
+          if (action.danger === "DESTRUCTIVE") params["confirm"] = target
+          this.pending = null
+          this.post(action, params)
+        },
+
+        async post(action, params) {
+          const r = await fetch("/api/run", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action: action.name, params }),
+          })
+          const body = await r.json()
+          if (!r.ok) {
+            this.lines.push({ text: "! " + (body.error ?? r.status), cls: "err" })
+            return
+          }
+          this.watch(body.job_id)
+          this.refresh()
+        },
+
+        watch(jobId) {
+          if (this.es) this.es.close()
+          this.lines = [{ text: "── job " + jobId + " ──", cls: "meta" }]
+          this.watching = jobId
+          this.es = new EventSource(`/api/jobs/${jobId}/logs`)
+          this.es.onmessage = (e) => { this.lines.push({ text: e.data, cls: "" }); this.scroll() }
+          this.es.addEventListener("done", (e) => {
+            this.lines.push({ text: "── " + e.data + " ──", cls: e.data.startsWith("succeeded") ? "ok" : "err" })
+            this.es.close()
+            this.refresh()
+            this.scroll()
+          })
+        },
+
+        scroll() {
+          this.$nextTick(() => {
+            const el = this.$refs.log
+            // stick to bottom unless the operator scrolled up to read
+            if (el.scrollHeight - el.scrollTop - el.clientHeight < 80) el.scrollTop = el.scrollHeight
+          })
+        },
+      }
+    }
+  </script>
+</body>
+
+</html>
