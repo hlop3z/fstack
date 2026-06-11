@@ -36,15 +36,15 @@
 - [x] 4.4 `netbird` component: digest-pinned to the EXACT images proven by the restore; CP-pinned; IngressRoute mirroring the compose routing (h2c gRPC split); cert-manager component (LE; vpn host isn't CF-proxied); backup CronJob (same archive shape, `netbird-state/k8s/` prefix). Opted-in at phase 6, builds standalone now
 - [x] 4.5 Root wiring complete; all 12 kustomize roots build clean (verified in-container); CI live on infra-v1
 
-## 5. srv2 cutover (production migration, part 1)
+## 5. srv2 cutover (production migration, part 1) — ✅ COMPLETE 2026-06-11
 
-- [ ] 5.1 Pre-flight: fresh CNPG backup verified in S3; Garage bucket inventory (sizes/counts) captured; v1 confirmed healthy on srv1 alone (drain rehearsal)
-- [ ] 5.2 Drain srv2 from v1 (cordon, drain, remove from v1 cluster); v1 continues single-node on srv1
-- [ ] 5.3 Rebuild srv2 (base/firewall/netbird roles), join new cluster as worker
-- [ ] 5.4 **MTU gate**: iperf3 pod-to-pod clouder↔srv2 and srv2↔srv1's future path (large payload, both directions); clamp flannel MTU if black-holing; do not proceed until clean
-- [ ] 5.5 Flux deploys platform components; all healthy on srv2
-- [ ] 5.6 Restore-first verification: CNPG restore from S3 → app-level query check; Garage sync (rclone) → object count + spot checksums; Zitadel up against restored DB → login check
-- [ ] 5.7 Deploy dufeut-site on new cluster; smoke test via hosts-override hostname (TLS serving)
+- [x] 5.1 Pre-flight: primary confirmed on srv1; fresh backup `pre-v2-migration` completed; garage inventory (1 bucket `uploads`); placement mapped
+- [x] 5.2 srv2 drained/deleted from v1 (with in-command CP guard); dufeut.com stayed 200 throughout; v1 single-node on srv1 = rollback anchor
+- [x] 5.3 srv2 joined new cluster (fixed k3s_worker delegation bug for -l limits); labels + enablelb applied
+- [x] 5.4 MTU gate PASSED: iperf3 pod-to-pod 428 Mbit/s, 0 loss, byte counts match (srv1 path re-tests at 7.2)
+- [x] 5.5 Platform deployed via Flux. Fixes en route, all in git: barman-cloud plugin v0.12.0 + cert-manager (the ObjectStore CRD v1 installed by script), HelmRelease install+upgrade remediation, zitadel 20m timeout, monitoring chart-default nodeSelector nulled
+- [x] 5.6 Restore-first VERIFIED: db-main recovered from v1's object store (zitadel db + 5 users — exact match vs v1 live primary); garage layout initialized. **Phase-6 checklist learned:** CNPG post-recovery resets the superuser password (sync zitadel-env) but NOT restored app roles (ALTER ROLE main to the db-main-app secret)
+- [x] 5.7 dufeut-site 2/2 Running on srv2 (imported image); **smoke via srv2 ingress: dufeut.com=200, auth.dufeut.com=200**; zitadel init Completed, server+login Running
 
 ## 6. NetBird in-cluster + DNS cutover
 
