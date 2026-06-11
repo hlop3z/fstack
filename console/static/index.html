@@ -625,11 +625,18 @@
             <div class="desc" x-text="action.description"></div>
             <div class="ctl">
               <template x-for="p in action.params" :key="p">
-                <select x-init="paramSel[action.name + '.' + p] = hosts[0] || ''"
+                <select x-init="paramSel[action.name + '.' + p] = (hosts[0] && hosts[0].name) || ''"
                   x-model="paramSel[action.name + '.' + p]">
-                  <template x-for="name in state.fleet" :key="name">
-                    <option x-text="name"></option>
-                  </template>
+                  <optgroup label="hosts">
+                    <template x-for="h in hosts" :key="h.name">
+                      <option x-text="h.name"></option>
+                    </template>
+                  </optgroup>
+                  <optgroup label="tags">
+                    <template x-for="g in groups" :key="g">
+                      <option x-text="g"></option>
+                    </template>
+                  </optgroup>
                 </select>
               </template>
               <button class="run" @click="request(action)">RUN ▸</button>
@@ -670,14 +677,23 @@
       <!-- fleet -->
       <div class="pane" x-show="tab === 'fleet'">
         <div class="banner" x-show="state.fleet_error" x-text="'INVENTORY UNAVAILABLE: ' + state.fleet_error"></div>
-        <div class="fleet-grid">
-          <template x-for="name in hosts" :key="name">
-            <div class="node"><b x-text="name"></b><small>HOST</small></div>
-          </template>
-          <template x-for="name in groups" :key="name">
-            <div class="node"><span x-text="name"></span><small>GROUP</small></div>
-          </template>
-        </div>
+        <table>
+          <thead>
+            <tr><th>HOST</th><th>TAGS</th></tr>
+          </thead>
+          <tbody>
+            <template x-for="h in hosts" :key="h.name">
+              <tr>
+                <td><b x-text="h.name" style="color: var(--phos);"></b></td>
+                <td>
+                  <template x-for="t in h.tags" :key="t">
+                    <span class="chip" :style="t === 'cp' ? 'border-color: var(--amber); color: var(--amber); margin-right: .4rem;' : 'margin-right: .4rem;'" x-text="t"></span>
+                  </template>
+                </td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
       </div>
     </div>
 
@@ -728,8 +744,8 @@
         paramSel: {}, lines: [], watching: null, es: null,
         tab: "actions", pending: null, typed: "", clock: "--:--:--",
 
-        get hosts() { return this.state.fleet.filter(n => n.includes(".")) },
-        get groups() { return this.state.fleet.filter(n => !n.includes(".")) },
+        get hosts() { return (this.state.fleet_detail && this.state.fleet_detail.hosts) || [] },
+        get groups() { return (this.state.fleet_detail && this.state.fleet_detail.groups) || [] },
         get running() { return this.state.jobs.some(j => j.status === "running") },
 
         init() {

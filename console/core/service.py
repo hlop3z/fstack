@@ -72,9 +72,10 @@ def snapshot() -> dict:
     """Everything the dashboard renders, in one document (the page's single poll target)."""
     try:
         fleet = sorted(inventory.load_names())
+        fleet_detail = inventory.structure()
         fleet_error = None
     except Exception as exc:  # inventory unavailable must not take down /api/state
-        fleet, fleet_error = [], str(exc)
+        fleet, fleet_detail, fleet_error = [], {"hosts": [], "groups": []}, str(exc)
     return {
         "actions": [
             {
@@ -86,6 +87,7 @@ def snapshot() -> dict:
             for a in REGISTRY.values()
         ],
         "fleet": fleet,
+        "fleet_detail": fleet_detail,
         "fleet_error": fleet_error,
         "jobs": [j.summary() for j in jobs.all_jobs()],
     }
