@@ -50,8 +50,9 @@
 
 - [x] 6.1 NetBird in-cluster on srv2 (LB-owning worker, not CP): config/dashboard as SOPS secrets, state transplanted into PVC, LE cert issued, interim compose stopped (on disk for rollback), vpn.dufeut.com flipped to srv2 (TTL 60), ALL peers reconnected. Fixes: NAT-hairpin hosts entry on the LB worker (folded into netbird_client role)
 - [x] 6.2 In-cluster backup CronJob round-trip VERIFIED (`netbird-identity-k8s-…tar.gz`: store/{store,idp,events}.db + config.yaml). Backup uses file-copy (rclone image has no sqlite). Host-level timer on clouder still present — remove at phase 7 decommission
-- [~] 6.3 **PARTIAL** — vpn.dufeut.com flipped (NetBird). dufeut.com + auth.dufeut.com NOT yet flipped (the user-visible cutover — awaiting go). Cloudflare TTLs lowered. Remaining: final db-main re-recovery (+ 2-step credential resync per phase-5 lesson), final Garage delta sync, then app/auth flip
-- [ ] 6.4 Verification window (days): v1-on-srv1 = rollback anchor until phase 7
+- [x] 6.3 **CUTOVER COMPLETE** — dufeut.com + auth.dufeut.com + vpn.dufeut.com now resolve to srv2 ONLY; all serve 200 through Cloudflare via real DNS. Discoveries: (a) hostnames had DUAL A records (v1's 2-node HA: srv1+srv2) — so ~50% of prod silently hit the new cluster since srv2 joined in phase 5; completed by DELETING the srv1/v1 records. (b) No destructive db re-recovery needed — identities verified identical (5 users/1 org/2 projects on both), dufeut is DB-less/static, Garage uploads bucket empty (0 objects). Rollback = re-add the 31.220.54.40 A records (v1 intact on srv1)
+- [x] 6.4-pre: CoreDNS hardened to 2 replicas one-per-node + PDB (fixes the cross-node DNS SPOF that the flannel-flap exposed); VERIFIED by killing one node's CoreDNS — the other node still resolved. Encoded in k3s_cp role
+- [ ] 6.4 Verification window (days): monitor app/DB/mesh/backups; v1-on-srv1 = rollback anchor until phase 7
 
 ### Phase-6 firefight log (all fixed, in git)
 - cert-manager webhook stranded on srv2 → cross-node API→webhook timeouts wedged the whole platform Kustomization → pinned cert-manager to the CP (same node as API server). Schema rejected YAML anchors; inlined.
