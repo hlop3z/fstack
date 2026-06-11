@@ -23,12 +23,21 @@ class Danger(Enum):
 class Action:
     name: str
     argv: tuple[str, ...]  # may contain {param} placeholders
-    params: tuple[str, ...] = ()  # params rendered into argv, validated against inventory
+    params: tuple[str, ...] = ()  # params rendered into argv
     danger: Danger = Danger.SAFE
     description: str = ""
     # Busy-lock key. "{<param>}" locks per rendered param value; a literal string
     # locks globally for that key (e.g. all fleet-wide actions share "fleet").
     target: str = "fleet"
+    # Per-param validation. A param is validated exactly one of three ways, ALL of
+    # which keep free text out of argv (the injection guard):
+    #   - listed in `choices`  -> value must be one of a closed enum
+    #   - listed in `patterns` -> value must fully match a strict regex
+    #   - otherwise            -> value must be a known inventory host/group (default)
+    # choices/patterns let the console provision (bucket/db/user names) without
+    # opening a shell-injection hole.
+    choices: tuple[tuple[str, tuple[str, ...]], ...] = ()  # (param, allowed values)
+    patterns: tuple[tuple[str, str], ...] = ()  # (param, regex)
 
 
 _BUILTINS: tuple[Action, ...] = (
@@ -69,6 +78,8 @@ def _target_actions() -> tuple[Action, ...]:
             danger=Danger[a.get("danger", "DISRUPTIVE").upper()],
             description=a.get("description", ""),
             target=a.get("target", "fleet"),
+            choices=tuple((k, tuple(v)) for k, v in (a.get("choices") or {}).items()),
+            patterns=tuple((k, v) for k, v in (a.get("patterns") or {}).items()),
         )
         for a in spec.get("actions", ())
     )

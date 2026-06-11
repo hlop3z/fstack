@@ -625,19 +625,39 @@
             <div class="desc" x-text="action.description"></div>
             <div class="ctl">
               <template x-for="p in action.params" :key="p">
-                <select x-init="paramSel[action.name + '.' + p] = (hosts[0] && hosts[0].name) || ''"
-                  x-model="paramSel[action.name + '.' + p]">
-                  <optgroup label="hosts">
-                    <template x-for="h in hosts" :key="h.name">
-                      <option x-text="h.name"></option>
-                    </template>
-                  </optgroup>
-                  <optgroup label="tags">
-                    <template x-for="g in groups" :key="g">
-                      <option x-text="g"></option>
-                    </template>
-                  </optgroup>
-                </select>
+                <span>
+                  <!-- closed enum (choices) -> dropdown of allowed values -->
+                  <template x-if="action.choices && action.choices[p]">
+                    <select x-init="paramSel[action.name + '.' + p] = action.choices[p][0]"
+                      x-model="paramSel[action.name + '.' + p]">
+                      <template x-for="c in action.choices[p]" :key="c">
+                        <option x-text="c"></option>
+                      </template>
+                    </select>
+                  </template>
+                  <!-- regex (patterns) -> validated free-text box -->
+                  <template x-if="action.patterns && action.patterns[p]">
+                    <input type="text" :placeholder="p"
+                      x-model="paramSel[action.name + '.' + p]"
+                      :pattern="action.patterns[p]" style="width: 12rem;">
+                  </template>
+                  <!-- default -> a fleet host/tag -->
+                  <template x-if="!(action.choices && action.choices[p]) && !(action.patterns && action.patterns[p])">
+                    <select x-init="paramSel[action.name + '.' + p] = (hosts[0] && hosts[0].name) || ''"
+                      x-model="paramSel[action.name + '.' + p]">
+                      <optgroup label="hosts">
+                        <template x-for="h in hosts" :key="h.name">
+                          <option x-text="h.name"></option>
+                        </template>
+                      </optgroup>
+                      <optgroup label="tags">
+                        <template x-for="g in groups" :key="g">
+                          <option x-text="g"></option>
+                        </template>
+                      </optgroup>
+                    </select>
+                  </template>
+                </span>
               </template>
               <button class="run" @click="request(action)">RUN ▸</button>
             </div>

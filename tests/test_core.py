@@ -34,7 +34,41 @@ NUKE = Action(
     danger=Danger.DESTRUCTIVE,
     target="{host}",
 )
-REGISTRY = {a.name: a for a in (SLEEP, ECHO, NUKE)}
+CREDS = Action(
+    name="test:creds",
+    argv=(sys.executable, "-c", "print('cred')"),
+    params=("service",),
+    choices=(("service", ("grafana", "garage")),),
+    target="creds-{service}",
+)
+BUCKET = Action(
+    name="test:bucket",
+    argv=(sys.executable, "-c", "print('bucket')"),
+    params=("name",),
+    patterns=(("name", r"^[a-z][a-z0-9-]{1,30}$"),),
+    target="bucket-{name}",
+)
+REGISTRY = {a.name: a for a in (SLEEP, ECHO, NUKE, CREDS, BUCKET)}
+
+
+class ParamModelTests(unittest.IsolatedAsyncioTestCase):
+    async def test_choices_enforced(self):
+        # a choice param must NOT be validated against inventory, and rejects off-list
+        with self.assertRaises(InvalidParam):
+            await service.run("test:creds", {"service": "redis"}, valid_names=NAMES, registry=REGISTRY)
+        job = await service.run("test:creds", {"service": "grafana"}, valid_names=frozenset(), registry=REGISTRY)
+        async for _ in job.stream():
+            pass
+        self.assertEqual(job.exit_code, 0)
+
+    async def test_pattern_enforced_and_injection_safe(self):
+        for evil in ("Bad Name", "x; rm -rf /", "$(reboot)", "a/b", "UPPER"):
+            with self.assertRaises(InvalidParam, msg=evil):
+                await service.run("test:bucket", {"name": evil}, valid_names=frozenset(), registry=REGISTRY)
+        job = await service.run("test:bucket", {"name": "media-prod"}, valid_names=frozenset(), registry=REGISTRY)
+        async for _ in job.stream():
+            pass
+        self.assertEqual(job.exit_code, 0)
 
 
 class ValidationTests(unittest.IsolatedAsyncioTestCase):

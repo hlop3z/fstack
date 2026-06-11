@@ -4,6 +4,8 @@ run() pipeline: registry lookup -> param validation against the closed
 inventory set -> danger gate -> spawn job. Adapters only marshal.
 """
 
+import re
+
 from . import inventory, jobs
 from .actions import REGISTRY, Action, Danger
 from .errors import ConfirmationRequired, InvalidParam, InventoryUnavailable, UnknownAction
@@ -15,13 +17,21 @@ def _validate(action: Action, params: dict[str, str], valid_names: frozenset[str
     extra = set(params) - set(action.params) - {CONFIRM_PARAM}
     if extra:
         raise InvalidParam(f"unexpected parameter(s): {', '.join(sorted(extra))}")
+    choices = dict(action.choices)
+    patterns = dict(action.patterns)
     rendered: dict[str, str] = {}
     for name in action.params:
         value = params.get(name)
         if value is None:
             raise InvalidParam(f"missing parameter: {name}")
-        # Closed-set membership IS the injection guard: free text never reaches argv.
-        if value not in valid_names:
+        # Exactly one validation path, each a closed/strict set — the injection guard.
+        if name in choices:
+            if value not in choices[name]:
+                raise InvalidParam(f"{name}={value!r} not in {list(choices[name])}")
+        elif name in patterns:
+            if not re.fullmatch(patterns[name], value):
+                raise InvalidParam(f"{name}={value!r} does not match {patterns[name]!r}")
+        elif value not in valid_names:
             raise InvalidParam(f"{name}={value!r} is not a known inventory host/group")
         rendered[name] = value
     return rendered
@@ -45,7 +55,10 @@ async def run(
         raise UnknownAction(f"no such action: {action_name}")
 
     if valid_names is None:
-        if action.params:
+        # Only the inventory-validated params need the inventory loaded; an action
+        # whose params are all choices/patterns must work even without SSH/inventory.
+        special = {p for p, _ in action.choices} | {p for p, _ in action.patterns}
+        if any(p not in special for p in action.params):
             try:
                 valid_names = inventory.load_names()
             except Exception as exc:
@@ -83,6 +96,10 @@ def snapshot() -> dict:
                 "description": a.description,
                 "danger": a.danger.name,
                 "params": list(a.params),
+                # how each param should be entered: a closed list -> dropdown,
+                # a regex -> validated text box, neither -> pick a fleet host
+                "choices": {k: list(v) for k, v in a.choices},
+                "patterns": {k: v for k, v in a.patterns},
             }
             for a in REGISTRY.values()
         ],
