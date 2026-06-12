@@ -12,6 +12,10 @@
 #
 # Keys named *_token / *_key / *_webhook / *_password / *_secret are auto-encrypted by
 # .sops.yaml. Any other name would store in PLAINTEXT, so `set` refuses it unless confirmed.
+#
+# Some keys FEED a derived gitops Secret the cluster reads (e.g. ghcr_pull_token ->
+# the ghcr imagePullSecret). For those, `set` also re-renders that gitops secret, so
+# rotating a credential is one command + a commit. (See the case map in `set` below.)
 set -eu
 
 # Relative to the console container's working dir (/work = the target repo). A relative
@@ -54,6 +58,19 @@ case "$cmd" in
     fi
     DC sops set "$FILE" "[\"$key\"]" "\"$val\""
     echo "✓ set $key (encrypted)"
+    # Some infra secrets FEED a derived gitops Secret the cluster actually reads (the
+    # cluster never reads infra/secrets directly). Re-render it now so set + render is one
+    # step. To add a mapping: <infra key> -> <ops.sh action that renders its gitops secret>.
+    render=""
+    case "$key" in
+      ghcr_pull_token)              render="ghcr-pull-secret" ;;
+      alertmanager_discord_webhook) render="alerts-discord" ;;
+    esac
+    if [ -n "$render" ]; then
+      echo "→ re-rendering the gitops secret it feeds ($render)…"
+      DC sh -c "cd /work && sh scripts/ops.sh $render"
+      echo "  ↳ now: commit & push infra-v1 so Flux applies it."
+    fi
     ;;
   ""|-h|--help) usage ;;
   *) echo "unknown command: $cmd" >&2; usage ;;
