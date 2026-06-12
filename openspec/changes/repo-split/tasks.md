@@ -1,11 +1,11 @@
 ## 1. Phase 0 — repo-agnostic tool (fstack + infra-v1)
 
-- [ ] 1.1 Add `secrets:` manifest to infra-v1 `console.actions.yml` (file, encrypted_suffixes, derived map for ghcr/discord/deadman)
-- [ ] 1.2 Implement `console secret set|get|list|rm` (manifest-driven; hidden prompt; suffix guard; post-write encryption check; derived re-render via the mapped ops action; clear error when manifest missing)
-- [ ] 1.3 Tests for the secret subcommand (manifest parsing, suffix guard, derived-map dispatch; sops mocked)
-- [ ] 1.4 Remove `secret.sh` from fstack; add thin `scripts/secret.sh` wrapper in infra-v1 (locates sibling fstack compose; delegates to `console secret`)
-- [ ] 1.5 Sweep fstack for remaining fleet references (key names, dufeut hosts) outside docs/examples; update README + operations.md usage
-- [ ] 1.6 Verify end-to-end: `secret list` + a no-op `secret set` of an existing key re-renders its derived secret, file stays encrypted; commit both repos
+- [x] 1.1 Add `secrets:` manifest to infra-v1 `console.actions.yml` (file, encrypted_suffixes, derived map for ghcr/discord/deadman)
+- [x] 1.2 Implement `console secret set|get|list|rm` (manifest-driven; hidden prompt; suffix guard; post-write encryption check; derived re-render via the mapped ops action; clear error when manifest missing)
+- [x] 1.3 Tests for the secret subcommand (manifest parsing, suffix guard, derived-map dispatch; sops mocked)
+- [x] 1.4 Remove `secret.sh` from fstack; add thin `scripts/secret.sh` wrapper in infra-v1 (locates sibling fstack compose; delegates to `console secret`)
+- [x] 1.5 Sweep fstack for remaining fleet references (key names, dufeut hosts) outside docs/examples; update README + operations.md usage
+- [x] 1.6 Verify end-to-end: `secret list` + a no-op `secret set` of an existing key re-renders its derived secret, file stays encrypted; commit both repos
 
 ## 2. Phase 1 — create and fill the gitops repo
 
