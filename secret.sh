@@ -65,6 +65,7 @@ case "$cmd" in
     case "$key" in
       ghcr_pull_token)              render="ghcr-pull-secret" ;;
       alertmanager_discord_webhook) render="alerts-discord" ;;
+      deadman_webhook)              render="alerts-discord" ;;
     esac
     if [ -n "$render" ]; then
       echo "→ re-rendering the gitops secret it feeds ($render)…"
