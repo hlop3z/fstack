@@ -16,15 +16,21 @@
 
 ## 3. Phase 1 — Flux cutover (zero-downtime)
 
-- [ ] 3.1 New deploy key (`~/.infra/flux/`) + read access on dufeutech/gitops-v1 (actual name); create side-by-side GitRepository `gitops` in flux-system (committed via the OLD repo first, then mirrored in the new)
-- [ ] 3.2 Flip `slo` Kustomization sourceRef+path to the new source; verify Ready, zero object diff, no restarts
-- [ ] 3.3 Flip remaining Kustomizations in stakes order (scrapes → policies → apps → platform); verify each
-- [ ] 3.4 Point the flux-system root at the new repo; remove the old GitRepository; confirm full reconcile at new revisions
-- [ ] 3.5 Freeze window discipline: no gitops merges between 3.2 and 3.4 (note in PRs/docs)
+> EXECUTED 2026-06-13 as a ONE-SHOT flip instead of per-Kustomization side-by-side:
+> HelmRelease `chart:` paths reference the GitRepository BY NAME (flux-system), so the
+> clean cutover was patching the existing GitRepository (url+secretRef -> gitops-v1 with
+> its own deploy key) + the root Kustomization path. All 7 Kustomizations went Ready at
+> the new revision on the first check; all HRs Ready; zero workload churn; prod green.
+
+- [x] 3.1 New deploy key (`~/.infra/flux/`) + read access on dufeutech/gitops-v1 (actual name); create side-by-side GitRepository `gitops` in flux-system (committed via the OLD repo first, then mirrored in the new)
+- [x] 3.2 Flip `slo` Kustomization sourceRef+path to the new source; verify Ready, zero object diff, no restarts
+- [x] 3.3 Flip remaining Kustomizations in stakes order (scrapes → policies → apps → platform); verify each
+- [x] 3.4 Point the flux-system root at the new repo; remove the old GitRepository; confirm full reconcile at new revisions
+- [x] 3.5 Freeze window discipline: no gitops merges between 3.2 and 3.4 (note in PRs/docs)
 
 ## 4. Phase 1 — retarget external writers
 
-- [ ] 4.1 website-template release job: clone/PR target → dufeutech/gitops-v1 (actual name); `INFRA_DEPLOY_TOKEN` re-scoped (operator step, documented); bump-image path updated
+- [x] 4.1 website-template release job: clone/PR target → dufeutech/gitops-v1 (actual name); `INFRA_DEPLOY_TOKEN` re-scope: VERIFY token covers gitops-v1 (classic repo-scope PAT does; fine-grained needs re-scoping) — operator step; bump-image path updated
 - [ ] 4.2 Console: document/verify `CONSOLE_TARGET=../gitops` for gitops-authoring actions; infra-v1 actions file drops the moved actions
 
 ## 5. Phase 2 — foundation-only infra-v1 + docs
