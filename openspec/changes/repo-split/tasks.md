@@ -9,14 +9,14 @@
 
 ## 2. Phase 1 — create and fill the gitops repo
 
-- [ ] 2.1 Create private `dufeutech/gitops`; `git subtree split` infra-v1 `gitops/` with history; push as `main`
-- [ ] 2.2 Make it self-contained: move `bump-image.sh`; add `.sops.yaml`, gitops-only CI (kustomize roots, sops lint, pin lint), `console.actions.yml` (image:ghcr-pull-secret, alerts:set-discord, dns:set/rm) + the ops render script; paths become repo-root-relative
-- [ ] 2.3 Split secrets by concern: new `secrets/ops.sops.yaml` in gitops (ghcr_pull_token, alertmanager_discord_webhook, deadman_webhook); remove those keys from infra-v1 `infra/secrets/infra.sops.yaml`; update both `secrets:` manifests
-- [ ] 2.4 CI green on the new repo before any cluster change
+- [x] 2.1 Create private `dufeutech/gitops-v1`; `git subtree split` infra-v1 `gitops/` with history; push as `main`
+- [x] 2.2 Make it self-contained: move `bump-image.sh`; add `.sops.yaml`, gitops-only CI (kustomize roots, sops lint, pin lint), `console.actions.yml` (image:ghcr-pull-secret, alerts:set-discord, dns:set/rm) + the ops render script; paths become repo-root-relative
+- [x] 2.3 Split secrets by concern: new `secrets/ops.sops.yaml` in gitops (ghcr_pull_token, alertmanager_discord_webhook, deadman_webhook); remove those keys from infra-v1 `infra/secrets/infra.sops.yaml`; update both `secrets:` manifests
+- [x] 2.4 CI green on the new repo before any cluster change
 
 ## 3. Phase 1 — Flux cutover (zero-downtime)
 
-- [ ] 3.1 New deploy key (`~/.infra/flux/`) + read access on dufeutech/gitops; create side-by-side GitRepository `gitops` in flux-system (committed via the OLD repo first, then mirrored in the new)
+- [ ] 3.1 New deploy key (`~/.infra/flux/`) + read access on dufeutech/gitops-v1 (actual name); create side-by-side GitRepository `gitops` in flux-system (committed via the OLD repo first, then mirrored in the new)
 - [ ] 3.2 Flip `slo` Kustomization sourceRef+path to the new source; verify Ready, zero object diff, no restarts
 - [ ] 3.3 Flip remaining Kustomizations in stakes order (scrapes → policies → apps → platform); verify each
 - [ ] 3.4 Point the flux-system root at the new repo; remove the old GitRepository; confirm full reconcile at new revisions
@@ -24,7 +24,7 @@
 
 ## 4. Phase 1 — retarget external writers
 
-- [ ] 4.1 website-template release job: clone/PR target → dufeutech/gitops; `INFRA_DEPLOY_TOKEN` re-scoped (operator step, documented); bump-image path updated
+- [ ] 4.1 website-template release job: clone/PR target → dufeutech/gitops-v1 (actual name); `INFRA_DEPLOY_TOKEN` re-scoped (operator step, documented); bump-image path updated
 - [ ] 4.2 Console: document/verify `CONSOLE_TARGET=../gitops` for gitops-authoring actions; infra-v1 actions file drops the moved actions
 
 ## 5. Phase 2 — foundation-only infra-v1 + docs
