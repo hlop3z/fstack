@@ -586,6 +586,47 @@
     ::-webkit-scrollbar-track {
       background: transparent;
     }
+    /* ---- secrets editor (localhost-only, ephemeral plaintext) ---- */
+    .secbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: .6rem;
+    }
+
+    .secmeta {
+      color: var(--dim);
+      font-size: 12px;
+    }
+
+    .seceditor {
+      width: 100%;
+      height: calc(100vh - 280px);
+      min-height: 260px;
+      background: var(--panel-2);
+      color: var(--ink);
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: .7rem .8rem;
+      font-family: var(--mono);
+      font-size: 13px;
+      line-height: 1.5;
+      tab-size: 2;
+      white-space: pre;
+      overflow: auto;
+      resize: vertical;
+    }
+
+    .seceditor:focus {
+      outline: none;
+      border-color: var(--phos);
+    }
+
+    .sechint {
+      color: var(--faint);
+      font-size: 11px;
+      margin-top: .5rem;
+    }
   </style>
 </head>
 
@@ -612,6 +653,8 @@
             x-text="state.jobs.length"></span></button>
         <button :class="{ on: tab === 'fleet' }" @click="tab = 'fleet'">FLEET<span class="n"
             x-text="hosts.length"></span></button>
+        <button :class="{ on: tab === 'secrets' }" @click="openSecrets()">SECRETS<span class="n"
+            x-text="secretsKeys.length || '·'"></span></button>
       </nav>
 
       <!-- actions -->
@@ -715,6 +758,22 @@
           </tbody>
         </table>
       </div>
+
+      <!-- secrets -->
+      <div class="pane" x-show="tab === 'secrets'">
+        <div class="secbar">
+          <span class="secmeta"
+            x-text="(secretsKeys.length || 0) + ' keys · ' + (secretsFile || '…')"></span>
+          <button class="run" :disabled="secretsSaving || !secretsDirty" @click="saveSecrets()"
+            x-text="secretsSaving ? 'SAVING…' : 'SAVE ▸'"></button>
+        </div>
+        <div class="banner" x-show="secretsError" x-text="secretsError"></div>
+        <textarea class="seceditor" x-model="secretsYaml" @input="secretsDirty = true"
+          @keydown.tab.prevent="insertTab($event)" spellcheck="false" autocomplete="off"
+          autocapitalize="off" autocorrect="off" placeholder="loading…"></textarea>
+        <div class="sechint">ephemeral plaintext · encrypted on save · derived secrets
+          re-render · then commit &amp; push so Flux applies</div>
+      </div>
     </div>
 
     <!-- ============ right: transmission log ============ -->
@@ -763,6 +822,8 @@
         state: { actions: [], fleet: [], jobs: [], fleet_error: null },
         paramSel: {}, lines: [], watching: null, es: null,
         tab: "actions", pending: null, typed: "", clock: "--:--:--",
+        secretsYaml: "", secretsKeys: [], secretsFile: "",
+        secretsError: "", secretsDirty: false, secretsSaving: false,
 
         get hosts() { return (this.state.fleet_detail && this.state.fleet_detail.hosts) || [] },
         get groups() { return (this.state.fleet_detail && this.state.fleet_detail.groups) || [] },
@@ -773,6 +834,8 @@
           setInterval(() => this.refresh(), 3000)
           const tick = () => this.clock = new Date().toISOString().slice(11, 19)
           tick(); setInterval(tick, 1000)
+          // drop decrypted plaintext from memory the moment you leave the tab
+          this.$watch("tab", (v) => { if (v !== "secrets") this.clearSecrets() })
         },
 
         async refresh() {
@@ -833,6 +896,47 @@
             // stick to bottom unless the operator scrolled up to read
             if (el.scrollHeight - el.scrollTop - el.clientHeight < 80) el.scrollTop = el.scrollHeight
           })
+        },
+
+        // ---- secrets: localhost-only editor over core.secrets (open_all / save_all) ----
+        openSecrets() { this.tab = "secrets"; this.loadSecrets() },
+        clearSecrets() { this.secretsYaml = ""; this.secretsDirty = false; this.secretsError = "" },
+
+        async loadSecrets() {
+          this.secretsError = ""
+          try {
+            const r = await fetch("/api/secrets", { cache: "no-store" })
+            const b = await r.json()
+            if (!r.ok) { this.secretsError = b.error ?? ("error " + r.status); return }
+            this.secretsYaml = b.yaml; this.secretsKeys = b.keys || []; this.secretsFile = b.file || ""
+            this.secretsDirty = false
+          } catch (e) { this.secretsError = "load failed: " + e }
+        },
+
+        async saveSecrets() {
+          this.secretsSaving = true; this.secretsError = ""
+          try {
+            const r = await fetch("/api/secrets", {
+              method: "POST", cache: "no-store",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ yaml: this.secretsYaml }),
+            })
+            const b = await r.json()
+            if (!r.ok) { this.secretsError = b.error ?? ("error " + r.status); return }
+            this.secretsDirty = false
+            const jobs = b.render_jobs || []
+            if (jobs.length) this.watch(jobs[0].job_id)   // stream the derived re-render
+            else this.lines.push({ text: "── secrets saved ──", cls: "ok" })
+            this.loadSecrets()                            // reload canonical (normalized + new keys)
+          } catch (e) { this.secretsError = "save failed: " + e }
+          finally { this.secretsSaving = false }
+        },
+
+        insertTab(e) {
+          const t = e.target, s = t.selectionStart, end = t.selectionEnd
+          t.value = t.value.slice(0, s) + "  " + t.value.slice(end)
+          t.selectionStart = t.selectionEnd = s + 2
+          this.secretsYaml = t.value; this.secretsDirty = true
         },
       }
     }
