@@ -12,6 +12,24 @@ from . import core
 from .core.actions import REGISTRY
 
 
+def _shred(path: str) -> None:
+    """Best-effort wipe of an ephemeral plaintext temp: overwrite, then unlink."""
+    import os
+
+    try:
+        size = os.path.getsize(path)
+        with open(path, "r+b") as fh:
+            fh.write(b"\0" * size)
+            fh.flush()
+            os.fsync(fh.fileno())
+    except OSError:
+        pass
+    try:
+        os.unlink(path)
+    except OSError:
+        pass
+
+
 def _cmd_list() -> int:
     width = max(len(name) for name in REGISTRY)
     for action in REGISTRY.values():
@@ -80,6 +98,42 @@ async def _cmd_secret(args) -> int:
                     print(">> done — commit & push the target repo so Flux applies it")
                 return rc
             return 0
+        if args.secret_command == "edit":
+            import os
+            import shlex
+            import subprocess
+            import tempfile
+
+            import yaml
+
+            data = secrets.open_all(manifest)
+            fd, tmp = tempfile.mkstemp(suffix=".sops-edit.yaml", dir=tempfile.gettempdir())
+            try:
+                with os.fdopen(fd, "w", encoding="utf-8") as fh:
+                    yaml.safe_dump(data, fh, sort_keys=True, default_flow_style=False)
+                try:
+                    os.chmod(tmp, 0o600)  # POSIX; Windows ACLs differ (local box only)
+                except OSError:
+                    pass
+                editor = os.environ.get("EDITOR") or ("notepad" if os.name == "nt" else "vi")
+                subprocess.call(shlex.split(editor) + [tmp])
+                with open(tmp, encoding="utf-8") as fh:
+                    new = yaml.safe_load(fh) or {}
+            finally:
+                _shred(tmp)  # ephemeral plaintext never persists
+            if new == data:
+                print("no changes")
+                return 0
+            actions = secrets.save_all(manifest, new, force=args.force)
+            print("saved (encrypted)")
+            for action in actions:
+                print(f">> re-rendering via {action} …")
+                rc = await _cmd_run(action, [])
+                if rc != 0:
+                    return rc
+            if actions:
+                print(">> done — commit & push the target repo so Flux applies it")
+            return 0
     except core.ConsoleError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
@@ -114,6 +168,12 @@ def main(argv: list[str] | None = None) -> int:
     s_set.add_argument("value", nargs="?", default=None)
     s_set.add_argument(
         "--force", action="store_true", help="allow a name outside the encrypted suffixes"
+    )
+    s_edit = sec.add_parser(
+        "edit", help="edit ALL keys in $EDITOR (ephemeral temp; re-encrypt + render derived)"
+    )
+    s_edit.add_argument(
+        "--force", action="store_true", help="allow names outside the encrypted suffixes"
     )
 
     args = parser.parse_args(argv)

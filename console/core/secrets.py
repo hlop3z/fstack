@@ -128,3 +128,41 @@ def _json_string(value: str) -> str:
     import json
 
     return json.dumps(value)
+
+
+def open_all(manifest: SecretsManifest) -> dict:
+    """Full decrypted key/value map — the source of truth, for bulk edit. The plaintext
+    must stay ephemeral in the caller (temp outside any synced dir, or in-memory only)."""
+    return _decrypted(manifest)
+
+
+def save_all(manifest: SecretsManifest, new: dict, force: bool = False) -> list[str]:
+    """Reconcile the whole secret set to `new`: write changed keys, drop removed ones,
+    and RETURN the distinct `derived` actions to re-render (the adapter runs them — this
+    layer stays ignorant of jobs). Validates every new/changed name up front so a
+    plaintext-bound name aborts the save BEFORE any write (no partial writes)."""
+    old = _decrypted(manifest)
+    norm = {str(k): (v if isinstance(v, str) else str(v)) for k, v in (new or {}).items()}
+    changed = {k: v for k, v in norm.items() if old.get(k) != v}
+    removed = [k for k in old if k not in norm]
+
+    if not force and manifest.encrypted_suffixes:
+        bad = [k for k in changed if not matches_suffix(manifest, k)]
+        if bad:
+            raise PlaintextRefused(
+                f"{bad} match none of {list(manifest.encrypted_suffixes)} — the target "
+                "repo's .sops.yaml would store them in PLAINTEXT. Rename to a convention "
+                "suffix, or pass force."
+            )
+
+    for key, value in changed.items():
+        set_value(manifest, key, value, force=True)  # names already validated above
+    for key in removed:
+        unset(manifest, key)
+
+    actions: list[str] = []
+    for key in [*changed, *removed]:
+        action = manifest.derived.get(key)
+        if action and action not in actions:
+            actions.append(action)
+    return actions
