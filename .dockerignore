@@ -1,0 +1,5 @@
+*
+!console/
+!docker-entrypoint.sh
+console/__pycache__/
+console/**/__pycache__/

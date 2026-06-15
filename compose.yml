@@ -1,0 +1,28 @@
+# Composition root: wiring only (mounts + ports). All logic lives in the image / target repo.
+#
+# Set CONSOLE_TARGET to the repo the console operates on (default: sibling your-repo).
+# Keys come from ~/.infra/ (OUTSIDE the repo tree and OUTSIDE OneDrive) — never from the image.
+
+services:
+  console:
+    build: .
+    ports:
+      # SECURITY CONTROL — loopback only. This process can launch root-SSH commands.
+      # Never drop the 127.0.0.1 prefix: a bare port binds 0.0.0.0 and exposes it to the LAN.
+      - "127.0.0.1:${CONSOLE_PORT:-8080}:8080"
+    volumes:
+      - ${CONSOLE_TARGET:-../target-repo}:/work # target repo (the repo it operates on)
+      # Optional key mount; entrypoint copies to /root/.ssh with chmod 600
+      # (Windows bind mounts surface 0644, which ssh rejects). If absent/empty,
+      # the entrypoint falls back to the target repo's config/ssh/.
+      - ${CONSOLE_KEYS:-~/.infra/ssh}:/keys/ssh:ro
+      - ~/.infra/age:/keys/age:ro # SOPS age key — outside the repo, outside OneDrive
+      - ~/.infra/flux:/keys/flux:ro # Flux deploy key (private fleet repo)
+      - ~/.infra/kube:/kube # operator kubeconfigs (k3s_cp writes prod.yaml here)
+    working_dir: /work
+    environment:
+      CONSOLE_TARGET_DIR: /work
+      # Windows bind mounts surface as world-writable, which makes Ansible ignore
+      # ansible.cfg found in cwd. Naming it explicitly marks it trusted.
+      # Override per target: ANSIBLE_CFG=/work/ansible.cfg CONSOLE_TARGET=../your-repo
+      ANSIBLE_CONFIG: ${ANSIBLE_CFG:-/work/infra/ansible.cfg}

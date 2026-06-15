@@ -1,0 +1,12 @@
+# LF discipline: these files are consumed inside Linux containers — CRLF breaks them.
+console/** text eol=lf
+Dockerfile text eol=lf
+compose.yml text eol=lf
+*.py text eol=lf
+*.sh text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+
+# Vendored minified assets: treat as binary-ish (no diff noise, no eol rewriting)
+console/static/*.min.js -diff text eol=lf
+console/static/*.min.css -diff text eol=lf
